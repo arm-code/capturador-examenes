@@ -28,6 +28,12 @@ def main():
         except FileNotFoundError:
             console.print(f"[bold red]Error:[/bold red] El archivo '{excel_file}' no existe. Reintente.")
 
+    modo_ejecucion = Prompt.ask(
+        "\n[bold yellow]Seleccione el modo de ejecución[/bold yellow]", 
+        choices=["auto", "manual"], 
+        default="manual"
+    )
+
     # Iterar sobre hojas
     for sheet_name in workbook.sheetnames:
         sheet = workbook[sheet_name]
@@ -78,7 +84,8 @@ def main():
 
                 # Automatización PyAutoGUI
                 console.print("[yellow]Iniciando captura en SIOSAD en 2 segundos...[/yellow]")
-                time.sleep(2)
+                pyautogui.press('f9')
+                time.sleep(1)
                 
                 pyautogui.click(x=150, y=150)
                 pyautogui.write(matricula_str)
@@ -96,19 +103,25 @@ def main():
                     pyautogui.press('enter')
 
                 # Confirmación manual
-                Prompt.ask("\n[bold cyan]Revise los datos en SIOSAD. Presione ENTER para GUARDAR (F2)[/bold cyan]")
-                time.sleep(1)                
+                if modo_ejecucion == "manual":
+                    Prompt.ask("\n[bold cyan]Revise los datos en SIOSAD. Presione ENTER para GUARDAR (F2)[/bold cyan]")
+                    time.sleep(1)                
+                
                 pyautogui.press('f2')
                 pyautogui.press('enter')
                 pyautogui.press('enter')
                 
                 console.print("[bold green]✔ CAPTURA EXITOSA[/bold green]")
                 
-                opcion = Prompt.ask("Presione ENTER para el siguiente o 'q' para salir", default="")
-                if opcion.lower() == 'q':
-                    sys.exit()
+                if modo_ejecucion == "manual":
+                    opcion = Prompt.ask("Presione ENTER para el siguiente o 'q' para salir", default="")
+                    if opcion.lower() == 'q':
+                        sys.exit()
+                
                 time.sleep(1)                    
                 pyautogui.press('f9')
+                if modo_ejecucion == "auto":
+                    time.sleep(1) # Breve pausa para que se limpie la pantalla
 
 
             except Exception as e:
