@@ -5,6 +5,7 @@ import pyautogui
 import time
 import threading
 import sys
+from automator import ejecutar_captura_siosad
 
 # Configuración de apariencia
 ctk.set_appearance_mode("System")  # Modes: "System" (standard), "Dark", "Light"
@@ -171,101 +172,26 @@ class App(ctk.CTk):
         self.log(f"======================================")
         
         # Ejecutar PyAutoGUI en un Hilo para no congelar la ventana gráfica
-        threading.Thread(target=self.run_automation, args=(config, modo), daemon=True).start()
+        threading.Thread(target=self.run_automation_thread, args=(config, modo), daemon=True).start()
 
-    def run_automation(self, config, modo_ejecucion):
-        try:
-            for item in config:
-                sheet_name = item["sheet"]
-                n_estudiantes = item["cant"]
-                inicio_estudiante = item["inicio"] + 1
-                limite_filas = n_estudiantes + 11
-                
-                sheet = self.workbook[sheet_name]
-                self.log(f"\n[SEDE: {sheet_name}] - ({n_estudiantes} estudiante/s)")
-
-                # Leer rangos (Misma lógica que script original)
-                columnas_a_leer = list(sheet.iter_cols(min_col=2, max_col=13, min_row=11, max_row=limite_filas))
-                datos_estudiante = list(sheet.iter_cols(min_col=14, max_col=16, min_row=11, max_row=limite_filas))
-                columnas_materias = list(sheet.iter_cols(min_col=17, max_col=20, min_row=11, max_row=limite_filas))
-
-                # Procesamiento
-                for row_idx in range(inicio_estudiante, limite_filas - 1):
-                    try:
-                        # Extraer Datos
-                        matricula_lista = [str(columnas_a_leer[c][row_idx - 1].value) for c in range(len(columnas_a_leer))]
-                        matricula_str = "".join(matricula_lista).replace("None", "")
-                        
-                        nombres_lista = [str(datos_estudiante[c][row_idx - 1].value) for c in range(len(datos_estudiante))]
-                        nombre_completo = " ".join(nombres_lista).replace("None", "").strip()
-
-                        materias = [str(columnas_materias[c][row_idx - 1].value) for c in range(len(columnas_materias)) 
-                                   if columnas_materias[c][row_idx - 1].value and str(columnas_materias[c][row_idx - 1].value) != 'None']
-
-                        self.log(f"-> Registro {row_idx - 1}: {nombre_completo} ({matricula_str}) | Materias: {len(materias)}")
-
-                        # Automatización
-                        self.log("Preparando captura en 2 segundos...")
-                        pyautogui.press('f9') # Refresh screen as requested by user previously
-                        time.sleep(1)
-                        
-                        pyautogui.click(x=150, y=150)
-                        pyautogui.write(matricula_str)
-                        pyautogui.press('enter')
-                        pyautogui.press('enter')
-                        pyautogui.write('404') 
-                        pyautogui.press('enter')
-                        pyautogui.write('S')
-                        pyautogui.write(str(sheet_name))
-                        pyautogui.press('enter')
-                        pyautogui.press('enter')
-
-                        for materia in materias:
-                            pyautogui.write(materia)
-                            pyautogui.press('enter')
-
-                        # Confirmación Manual vía UI
-                        if modo_ejecucion == "manual":
-                            res = self.ask_gui_confirmation("Confirmación de Guardado", 
-                                "Revise los datos en la ventana de SIOSAD.\n\n¿Presionar Aceptar para GUARDAR su registro (F2)?")
-                            if not res:
-                                self.log("✖ Captura omitida/abortada.")
-                                self.finish_automation()
-                                return
-                        
-                        pyautogui.press('f2')
-                        pyautogui.press('enter')
-                        pyautogui.press('enter')
-                        
-                        self.log("✔ CAPTURA EXITOSA")
-                        
-                        if modo_ejecucion == "manual":
-                            res2 = self.ask_gui_confirmation("Siguiente", "¿Continuar con el siguiente alumno?")
-                            if not res2:
-                                self.log("✖ Proceso terminado por el usuario.")
-                                self.finish_automation()
-                                return
-                        
-                        time.sleep(1)                    
-                        pyautogui.press('f9')
-                        
-                        if modo_ejecucion == "auto":
-                            time.sleep(1) # Breve pausa para limpiar pantalla
-                            
-                    except Exception as e:
-                        # La manera que el codigo original maneja las listas vacías
-                        self.log(f"Aviso en registro {row_idx}: {e}")
-                        break
-
-            self.log("\n======================================")
-            self.log("✅ PROCESO TOTAL FINALIZADO")
-            self.after(0, lambda: messagebox.showinfo("Éxito", "El proceso de captura de todas las sedes ha terminado."))
-            
-        except Exception as e:
-            self.log(f"✖ ERROR CRÍTICO: {e}")
-            self.after(0, lambda e=e: messagebox.showerror("Error", f"Fallo durante la ejecución:\n{e}"))
-        finally:
+    def run_automation_thread(self, config, modo):
+        # Función callback cuando el automator termina (ya sea error o éxito)
+        def on_finish(success=True, error_msg=""):
+            if success and not error_msg:
+                self.after(0, lambda: messagebox.showinfo("Éxito", "El proceso de captura de todas las sedes ha terminado."))
+            elif error_msg:
+                self.after(0, lambda e=error_msg: messagebox.showerror("Error", f"Fallo durante la ejecución:\n{e}"))
             self.finish_automation()
+
+        # Llamamos a nuestro módulo separado
+        ejecutar_captura_siosad(
+            workbook=self.workbook,
+            config=config,
+            modo_ejecucion=modo,
+            logger=self.log,
+            confirmador_manual=self.ask_gui_confirmation,
+            on_finish=on_finish
+        )
 
     def ask_gui_confirmation(self, title, message):
         """Muestra un messagebox en el Main Thread y pausa el Background Thread hasta tener respuesta."""
