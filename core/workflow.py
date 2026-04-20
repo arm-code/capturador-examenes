@@ -23,7 +23,12 @@ def ejecutar_workflow_completo(workbook, config, modo_ejecucion, logger, confirm
             
             # Extraer del Excel
             estudiantes_brutos = extraer_estudiantes_de_sede(workbook, sheet_name, n_estudiantes, inicio_estudiante)
+            logger(f"  → Extraídos {len(estudiantes_brutos)} registros del Excel.")
             
+            if not estudiantes_brutos:
+                logger("  ⚠ No se encontraron registros en el rango especificado.")
+                continue
+
             # Validar con API
             for est in estudiantes_brutos:
                 logger(f"Validando {est['matricula']} ({est['nombre']})...")
