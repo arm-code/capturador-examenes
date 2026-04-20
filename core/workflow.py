@@ -1,6 +1,6 @@
 from core.excel_parser import extraer_estudiantes_de_sede
 from core.automator import ejecutar_automatizacion_siosad
-from api.api_client import verificar_estudiante
+from api.api_client import verificar_estudiante, verificar_materia_aprobada
 import time
 
 def ejecutar_workflow_completo(workbook, config, modo_ejecucion, logger, confirmador_manual, on_finish):
@@ -8,11 +8,12 @@ def ejecutar_workflow_completo(workbook, config, modo_ejecucion, logger, confirm
     Orquestador principal que valida y luego captura.
     """
     total_validados = []
-    total_rechazados = [] # Estudiantes que no pasaron la validación API
+    total_rechazados = []  # Estudiantes que no existen en la API
+    total_omitidos_aprobados = [] # Estudiantes con TODO aprobado
     
     try:
         # FASE 1: EXTRACCIÓN Y VALIDACIÓN
-        logger("\n--- FASE 1: VALIDACIÓN DE MATRÍCULAS ---")
+        logger("\n--- FASE 1: VALIDACIÓN DE DATOS (API) ---")
         
         for item in config:
             sheet_name = item["sheet"]
@@ -31,16 +32,45 @@ def ejecutar_workflow_completo(workbook, config, modo_ejecucion, logger, confirm
 
             # Validar con API
             for est in estudiantes_brutos:
-                logger(f"Validando {est['matricula']} ({est['nombre']})...")
-                exito, info = verificar_estudiante(est['matricula'])
+                matricula = est['matricula']
+                logger(f"Validando {matricula} ({est['nombre']})...")
                 
-                if exito:
-                    logger(f"  ✔ Válido: {info.get('Nombre', 'Estudiante')} ({info.get('estado', 'N/A')})")
-                    total_validados.append(est)
-                else:
-                    logger(f"  ✖ Rechazado: {info}")
+                # 1. Verificar existencia del estudiante
+                exito, info = verificar_estudiante(matricula)
+                if not exito:
+                    logger(f"  ✖ Estudiante no válido: {info}")
                     est["error"] = info
                     total_rechazados.append(est)
+                    continue
+
+                logger(f"  ✔ Estudiante válido: {info.get('Nombre', 'N/A')}")
+
+                # 2. Verificar cada materia
+                materias_originales = est['materias']
+                materias_a_capturar = []
+                materias_ya_aprobadas = []
+
+                for m in materias_originales:
+                    logger(f"    - Revisando materia {m}...")
+                    if verificar_materia_aprobada(matricula, m):
+                        logger(f"      ⚠ Ya aprobada. Se omitirá.")
+                        materias_ya_aprobadas.append(m)
+                    else:
+                        materias_a_capturar.append(m)
+
+                # Actualizar datos del estudiante
+                est['materias'] = materias_a_capturar
+                est['materias_ya_aprobadas'] = materias_ya_aprobadas
+
+                if not materias_a_capturar:
+                    logger(f"  ➡ OMITIDO: {matricula} tiene TODO aprobado ({len(materias_ya_aprobadas)} mat).")
+                    total_omitidos_aprobados.append(est)
+                else:
+                    if materias_ya_aprobadas:
+                        logger(f"  ✔ Pendiente: Se capturarán {len(materias_a_capturar)} materias (omitiendo {len(materias_ya_aprobadas)} aprobadas).")
+                    else:
+                        logger(f"  ✔ Pendiente: {len(materias_a_capturar)} materias por capturar.")
+                    total_validados.append(est)
         
         # FASE 2: AUTOMATIZACIÓN
         if not total_validados:
@@ -70,6 +100,8 @@ def ejecutar_workflow_completo(workbook, config, modo_ejecucion, logger, confirm
             
         on_finish(success=exito_final, extra_info={
             "rechazados": total_rechazados,
+            "omitidos_aprobados": total_omitidos_aprobados,
+            "validados": total_validados, # Contiene info de mat aprobadas internas
             "capturados": len(total_validados) if exito_final else "Parcial"
         })
 

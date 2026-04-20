@@ -178,24 +178,46 @@ class App(ctk.CTk):
         # Función callback cuando el automator termina
         def on_finish(success=True, error_msg="", extra_info=None):
             if success and not error_msg:
-                msg = "El proceso ha terminado."
+                self.log("\n======================================")
+                self.log("📋 REPORTE FINAL DE EJECUCIÓN")
+                self.log("======================================")
+                
                 if extra_info:
                     rechazados = extra_info.get("rechazados", [])
+                    omitidos = extra_info.get("omitidos_aprobados", [])
+                    validados = extra_info.get("validados", [])
                     capturados = extra_info.get("capturados", 0)
                     
-                    reporte = f"\nResumen final:\n- Capturados: {capturados}\n- No encontrados (API): {len(rechazados)}"
-                    self.log(reporte)
+                    self.log(f"- Exitosos/Capturados: {capturados}")
+                    self.log(f"- No encontrados (API): {len(rechazados)}")
+                    self.log(f"- Omitidos (Totalmente aprobados): {len(omitidos)}")
                     
+                    # Detalle de Rechazados (No existen)
                     if rechazados:
-                        detalle = "\n\nEstudiantes NO encontrados en API:\n"
+                        self.log("\n❌ MATRÍCULAS NO ENCONTRADAS:")
                         for r in rechazados:
-                            detalle += f"- {r['matricula']}: {r['nombre']} (Error: {r['error']})\n"
-                        self.log(detalle)
-                        
-                        self.after(0, lambda: messagebox.showwarning("Proceso Terminado", 
-                            f"Se capturaron {capturados} estudiantes.\n\n{len(rechazados)} alumnos no fueron encontrados en la API y se omitieron. Revisa la consola para el detalle."))
+                            self.log(f"  • {r['matricula']}: {r['nombre']} (Error: {r['error']})")
+                    
+                    # Detalle de Omitidos (Todo aprobado)
+                    if omitidos:
+                        self.log("\n✅ ALUMNOS OMITIDOS (TODO YA APROBADO):")
+                        for o in omitidos:
+                            self.log(f"  • {o['matricula']}: {o['nombre']} ({len(o.get('materias_ya_aprobadas', []))} mat.)")
+                    
+                    # Detalle de Capturas con materias parciales ya aprobadas
+                    parciales = [v for v in validados if v.get('materias_ya_aprobadas')]
+                    if parciales:
+                        self.log("\n⚠ CAPTURAS PARCIALES (TENÍAN MATERIAS YA APROBADAS):")
+                        for p in parciales:
+                            mats = ", ".join(p['materias_ya_aprobadas'])
+                            self.log(f"  • {p['matricula']}: {p['nombre']} (Se omitieron: {mats})")
+
+                    # Mostrar MessageBox resumen
+                    resumen_msg = f"Proceso finalizado.\n\n- Capturados: {capturados}\n- No encontrados: {len(rechazados)}\n- Ya aprobados (Omitidos): {len(omitidos)}"
+                    if rechazados or omitidos or parciales:
+                        self.after(0, lambda: messagebox.showwarning("Resumen de Captura", resumen_msg + "\n\nRevisa la consola para ver el detalle de omisiones."))
                     else:
-                        self.after(0, lambda: messagebox.showinfo("Éxito", f"Se capturaron {capturados} estudiantes correctamente."))
+                        self.after(0, lambda: messagebox.showinfo("Éxito", resumen_msg))
                 else:
                     self.after(0, lambda: messagebox.showinfo("Éxito", "El proceso de captura ha terminado."))
             
