@@ -5,7 +5,7 @@ import pyautogui
 import time
 import threading
 import sys
-from automator import ejecutar_captura_siosad
+from core.workflow import ejecutar_workflow_completo
 
 # Configuración de apariencia
 ctk.set_appearance_mode("System")  # Modes: "System" (standard), "Dark", "Light"
@@ -175,16 +175,37 @@ class App(ctk.CTk):
         threading.Thread(target=self.run_automation_thread, args=(config, modo), daemon=True).start()
 
     def run_automation_thread(self, config, modo):
-        # Función callback cuando el automator termina (ya sea error o éxito)
-        def on_finish(success=True, error_msg=""):
+        # Función callback cuando el automator termina
+        def on_finish(success=True, error_msg="", extra_info=None):
             if success and not error_msg:
-                self.after(0, lambda: messagebox.showinfo("Éxito", "El proceso de captura de todas las sedes ha terminado."))
+                msg = "El proceso ha terminado."
+                if extra_info:
+                    rechazados = extra_info.get("rechazados", [])
+                    capturados = extra_info.get("capturados", 0)
+                    
+                    reporte = f"\nResumen final:\n- Capturados: {capturados}\n- No encontrados (API): {len(rechazados)}"
+                    self.log(reporte)
+                    
+                    if rechazados:
+                        detalle = "\n\nEstudiantes NO encontrados en API:\n"
+                        for r in rechazados:
+                            detalle += f"- {r['matricula']}: {r['nombre']} (Error: {r['error']})\n"
+                        self.log(detalle)
+                        
+                        self.after(0, lambda: messagebox.showwarning("Proceso Terminado", 
+                            f"Se capturaron {capturados} estudiantes.\n\n{len(rechazados)} alumnos no fueron encontrados en la API y se omitieron. Revisa la consola para el detalle."))
+                    else:
+                        self.after(0, lambda: messagebox.showinfo("Éxito", f"Se capturaron {capturados} estudiantes correctamente."))
+                else:
+                    self.after(0, lambda: messagebox.showinfo("Éxito", "El proceso de captura ha terminado."))
+            
             elif error_msg:
                 self.after(0, lambda e=error_msg: messagebox.showerror("Error", f"Fallo durante la ejecución:\n{e}"))
+            
             self.finish_automation()
 
-        # Llamamos a nuestro módulo separado
-        ejecutar_captura_siosad(
+        # Llamamos al orquestador (Workflow)
+        ejecutar_workflow_completo(
             workbook=self.workbook,
             config=config,
             modo_ejecucion=modo,
