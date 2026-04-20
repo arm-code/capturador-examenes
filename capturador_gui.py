@@ -5,7 +5,7 @@ import pyautogui
 import time
 import threading
 import sys
-from automator import ejecutar_captura_siosad
+from core.workflow import ejecutar_workflow_completo
 
 # Configuración de apariencia
 ctk.set_appearance_mode("System")  # Modes: "System" (standard), "Dark", "Light"
@@ -175,16 +175,59 @@ class App(ctk.CTk):
         threading.Thread(target=self.run_automation_thread, args=(config, modo), daemon=True).start()
 
     def run_automation_thread(self, config, modo):
-        # Función callback cuando el automator termina (ya sea error o éxito)
-        def on_finish(success=True, error_msg=""):
+        # Función callback cuando el automator termina
+        def on_finish(success=True, error_msg="", extra_info=None):
             if success and not error_msg:
-                self.after(0, lambda: messagebox.showinfo("Éxito", "El proceso de captura de todas las sedes ha terminado."))
+                self.log("\n======================================")
+                self.log("📋 REPORTE FINAL DE EJECUCIÓN")
+                self.log("======================================")
+                
+                if extra_info:
+                    rechazados = extra_info.get("rechazados", [])
+                    omitidos = extra_info.get("omitidos_aprobados", [])
+                    validados = extra_info.get("validados", [])
+                    capturados = extra_info.get("capturados", 0)
+                    
+                    self.log(f"- Exitosos/Capturados: {capturados}")
+                    self.log(f"- No encontrados (API): {len(rechazados)}")
+                    self.log(f"- Omitidos (Totalmente aprobados): {len(omitidos)}")
+                    
+                    # Detalle de Rechazados (No existen)
+                    if rechazados:
+                        self.log("\n❌ MATRÍCULAS NO ENCONTRADAS:")
+                        for r in rechazados:
+                            self.log(f"  • {r['matricula']}: {r['nombre']} (Error: {r['error']})")
+                    
+                    # Detalle de Omitidos (Todo aprobado)
+                    if omitidos:
+                        self.log("\n✅ ALUMNOS OMITIDOS (TODO YA APROBADO):")
+                        for o in omitidos:
+                            self.log(f"  • {o['matricula']}: {o['nombre']} ({len(o.get('materias_ya_aprobadas', []))} mat.)")
+                    
+                    # Detalle de Capturas con materias parciales ya aprobadas
+                    parciales = [v for v in validados if v.get('materias_ya_aprobadas')]
+                    if parciales:
+                        self.log("\n⚠ CAPTURAS PARCIALES (TENÍAN MATERIAS YA APROBADAS):")
+                        for p in parciales:
+                            mats = ", ".join(p['materias_ya_aprobadas'])
+                            self.log(f"  • {p['matricula']}: {p['nombre']} (Se omitieron: {mats})")
+
+                    # Mostrar MessageBox resumen
+                    resumen_msg = f"Proceso finalizado.\n\n- Capturados: {capturados}\n- No encontrados: {len(rechazados)}\n- Ya aprobados (Omitidos): {len(omitidos)}"
+                    if rechazados or omitidos or parciales:
+                        self.after(0, lambda: messagebox.showwarning("Resumen de Captura", resumen_msg + "\n\nRevisa la consola para ver el detalle de omisiones."))
+                    else:
+                        self.after(0, lambda: messagebox.showinfo("Éxito", resumen_msg))
+                else:
+                    self.after(0, lambda: messagebox.showinfo("Éxito", "El proceso de captura ha terminado."))
+            
             elif error_msg:
                 self.after(0, lambda e=error_msg: messagebox.showerror("Error", f"Fallo durante la ejecución:\n{e}"))
+            
             self.finish_automation()
 
-        # Llamamos a nuestro módulo separado
-        ejecutar_captura_siosad(
+        # Llamamos al orquestador (Workflow)
+        ejecutar_workflow_completo(
             workbook=self.workbook,
             config=config,
             modo_ejecucion=modo,
