@@ -188,7 +188,7 @@ class CapturadorApp:
                 with ui.row().classes('items-center bg-slate-800/50 rounded-xl px-4 py-1 border border-slate-700 hover:border-blue-500 transition-all'):
                     ui.icon('upload_file', color='blue-400')
                     ui.upload(on_upload=self.handle_upload, label='Subir Excel', auto_upload=True) \
-                      .props('flat color=white hide-upload-btn').classes('w-48')
+                      .props('flat color=black hide-upload-btn').classes('w-48')
 
         with ui.row().classes('w-full h-[calc(100vh-80px)] no-wrap gap-0'):
             # Sidebar
