@@ -3,7 +3,7 @@ from core.automator import ejecutar_automatizacion_siosad
 from api.api_client import verificar_estudiante, verificar_materia_aprobada
 import time
 
-def ejecutar_workflow_completo(workbook, config, modo_ejecucion, logger, confirmador_manual, on_finish):
+def ejecutar_workflow_completo(workbook, config, modo_ejecucion, logger, confirmador_manual, on_finish, on_validation_result=None):
     """
     Orquestador principal que valida y luego captura.
     """
@@ -41,6 +41,8 @@ def ejecutar_workflow_completo(workbook, config, modo_ejecucion, logger, confirm
                     logger(f"  ✖ Estudiante no válido: {info}")
                     est["error"] = info
                     total_rechazados.append(est)
+                    if on_validation_result:
+                        on_validation_result({"matricula": matricula, "nombre": est['nombre'], "status": "No encontrado"})
                     continue
 
                 logger(f"  ✔ Estudiante válido: {info.get('Nombre', 'N/A')}")
@@ -65,12 +67,24 @@ def ejecutar_workflow_completo(workbook, config, modo_ejecucion, logger, confirm
                 if not materias_a_capturar:
                     logger(f"  ➡ OMITIDO: {matricula} tiene TODO aprobado ({len(materias_ya_aprobadas)} mat).")
                     total_omitidos_aprobados.append(est)
+                    if on_validation_result:
+                        on_validation_result({"matricula": matricula, "nombre": est['nombre'], "status": "Aprobado (Omitido)"})
                 else:
                     if materias_ya_aprobadas:
                         logger(f"  ✔ Pendiente: Se capturarán {len(materias_a_capturar)} materias (omitiendo {len(materias_ya_aprobadas)} aprobadas).")
+                        status = f"Pendiente ({len(materias_a_capturar)} mat)"
                     else:
                         logger(f"  ✔ Pendiente: {len(materias_a_capturar)} materias por capturar.")
+                        status = "Pendiente"
                     total_validados.append(est)
+                
+                # Reportar a la tabla
+                if on_validation_result:
+                    on_validation_result({
+                        "matricula": matricula,
+                        "nombre": est['nombre'],
+                        "status": status
+                    })
         
         # FASE 2: AUTOMATIZACIÓN
         if not total_validados:

@@ -1,3 +1,4 @@
+import requests
 from config import API_BASE_URL, API_CALIFICACIONES_URL
 
 def verificar_estudiante(matricula):
